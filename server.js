@@ -1,11 +1,30 @@
 /*
-  WebSocket server initialization code found at NodeJS.org:
+  WebSocket server initialization code adapted from NodeJS.org:
   https://nodejs.org/en/learn/getting-started/websocket
+
+  WebSocket protocol defined in:
+  RFC 6455 – The WebSocket Protocol (Fette & Melnikov, 2011)
+  https://datatracker.ietf.org/doc/html/rfc6455
+
+  WebSocket allows for persistent two-way communication between the client
+  and server without the need for constant HTTP requests.
 */
 
-//get websocket and start node server
 const WebSocket = require('ws');
 const wss = new WebSocket.Server({ port: 8080, path: '/ws/' });
+
+/*
+  Using a server model as described in:
+  Gaffer On Games – "What Every Programmer Needs To Know About Game Networking"
+  https://gafferongames.com/post/what_every_programmer_needs_to_know_about_game_networking/
+
+  In this model:
+  - The server owns the true game state
+  - Clients only send input
+  - Server distributes validated state updates
+
+  This prevents client-side cheating and ensures synchronization.
+*/
 
 //stores active clients, numerical id in order of joining
 const clients = new Map();
@@ -61,6 +80,12 @@ function updateLog(info){
     }
   });
 }
+
+/*
+  Fixed timestep server loop (30 Hz)
+
+  A fixed update rate ensures consistent simulation timing, reduces jitter, and is easier on the network.
+*/
 
 //send client updated player positions
 function sendPositions(){
