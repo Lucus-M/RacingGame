@@ -36,11 +36,13 @@ wss.on('connection', function connection(ws) {
   console.log('Client connected');
   console.log("Number of clients: ", wss.clients.size);
 
-  updateLog("Client " + clientId + " joined the session.")
-  
   //increment id number for next user
-  const clientId = nextId++;
+  const clientId = nextId;
 
+  updateLog("Client " + clientId + " joined the session.")
+
+  nextId++;
+  
   // initialize client state, generate random assigned color
   const randomColor = Math.floor(Math.random() * 0xFFFFFF).toString(16).padStart(6, '0');
   clients.set(ws, { x: 0, y: 0, color: randomColor, id: clientId });
