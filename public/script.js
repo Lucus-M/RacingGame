@@ -62,11 +62,26 @@ sprite.src = "public/myface.png";
   This implements an input-based networking model rather than 
   state replication from the client (reduces cheating risk).
 */
+
+let mousedown = false;
+
+document.addEventListener('mousedown', () => {
+    console.log(mousedown);
+    mousedown = true;
+})
+document.addEventListener('mouseup', () => {
+    console.log(mousedown);
+    mousedown = false;
+})
+
 document.addEventListener('mousemove', (event) => {
-    const posx = event.clientX;
-    const posy = event.clientY;
-    //send data to server
-    ws.send(JSON.stringify({type: "mousemove", x: posx, y: posy}))
+    console.log(mousedown);
+    if(mousedown){
+        const posx = event.clientX;
+        const posy = event.clientY;
+        //send data to server
+        ws.send(JSON.stringify({type: "mousemove", x: posx, y: posy}))
+    }
 })
 
 let players = [];
