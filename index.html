@@ -12,11 +12,28 @@
     <link rel="stylesheet" href="style.css">
 </head>
 
-<body>    
-    <canvas id="gamescreen" width="1200" height="900">
+<body>
+    <div id="joinScreen" style="display: block">
+        <h1>Join Lobby</h1>
+        <p>Enter code to join</p>
+        <input type="text" id="codeInput"></input><br>
+        <input type="button" id="joinLobbyButton" value="Join"></input>
 
+        <h1>Create Lobby</h1>
+        <input type="button" id="createLobbyButton" value="Create"></input>
+    </div>
+
+    <div id="lobbyScreen" style="display: none">
+        <h1 id="lobbynamedisplay">Lobby</h1>
+        <h3 id="codeDisplay">0000000</h3>
+        <h3>Players: <span id="numofplayers">0</span></h3>
+        <input type="button" id="startGame" style="display: none" value="Start"></input>
+    </div>
+
+    <canvas id="gameScreen" width="1900" height="1075" style="display: none">
 
     </canvas>
+
     <p id="log">
 
     </p>
@@ -24,4 +41,5 @@
 </body>
 
     <script src="public/script.js"></script>
+    <script src="public/menus.js"></script>
 </html>

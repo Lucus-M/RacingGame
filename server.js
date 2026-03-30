@@ -1,119 +1,211 @@
-/*
-  WebSocket server initialization code adapted from NodeJS.org:
-  https://nodejs.org/en/learn/getting-started/websocket
-
-  WebSocket protocol defined in:
-  RFC 6455 – The WebSocket Protocol (Fette & Melnikov, 2011)
-  https://datatracker.ietf.org/doc/html/rfc6455
-
-  WebSocket allows for persistent two-way communication between the client
-  and server without the need for constant HTTP requests.
-*/
-
 const WebSocket = require('ws');
 const wss = new WebSocket.Server({ port: 8080, path: '/ws/' });
 
-/*
-  Using a server model as described in:
-  Gaffer On Games – "What Every Programmer Needs To Know About Game Networking"
-  https://gafferongames.com/post/what_every_programmer_needs_to_know_about_game_networking/
-
-  In this model:
-  - The server owns the true game state
-  - Clients only send input
-  - Server distributes validated state updates
-
-  This prevents client-side cheating and ensures synchronization.
-*/
-
-//stores active clients, numerical id in order of joining
-const clients = new Map();
+const lobbies = new Map(); //lobbies to join with an 8 digit code
+const clients = new Map(); //client corresponding to each player (key: clientid)
+const players = new Map(); ///player information (key: clientid)
 let nextId = 1;
 
-//when ws connects
-wss.on('connection', function connection(ws) {
-  //server output
+wss.on('connection', (ws) => {
   console.log('Client connected');
-  console.log("Number of clients: ", wss.clients.size);
+  console.log("Number of clients:", wss.clients.size);
 
-  //increment id number for next user
   const clientId = nextId;
-
-  updateLog("Client " + clientId + " joined the session.")
-
   nextId++;
-  
-  // initialize client state, generate random assigned color
-  const randomColor = Math.floor(Math.random() * 0xFFFFFF).toString(16).padStart(6, '0');
-  clients.set(ws, { x: 0, y: 0, color: randomColor, id: clientId });
 
-  /*
-    Data sending and retrieval code from NodeJS.org: 
-    https://nodejs.org/en/learn/getting-started/websocket#basic-connection-and-message-handling
-  */
-  //perform when client sends data to server
-  ws.on('message', function incoming(message) {
+  clients.set(clientId, ws)
+
+  players.set(clientId, {
+    x: 0,
+    y: 0,
+    ty: 0,
+    id: clientId,
+    lobby: "none"
+  })
+
+  const player = players.get(clientId);
+
+  ws.send(JSON.stringify({
+    type: "init",
+    id: clientId,
+  }));
+
+  ws.on('message', (message) => {
     const data = JSON.parse(message.toString()); //parse JSON string
+
+    if (!player) return;
 
     //client mouse update event
     if(data.type === "mousemove"){
-      //update clients list with new info (player mouse position)
-      const clientData = clients.get(ws);
-      clientData.x = data.x;
-      clientData.y = data.y;
+      player.x = data.x;
+      player.y = data.y;
+    }
+    if(data.type === "mousedown"){
+      player.md = data.md; //mouse up/down
+    }
+    if(data.type === "createLobby"){
+      createLobby(clientId);
+    }
+    if (data.type === "joinLobby") {
+      joinLobby(data.code, clientId)
+    }
+    if (data.type === "startGame") {
+      console.log("game start!");
+      startGame(lobbies.get(player.lobby), clientId);
     }
   });
 
-  //close session, output to log
   ws.on('close', () => {
-      clients.delete(ws);
-      console.log(`Client disconnected: ${clientId}`);
-        updateLog("Client " + clientId + " left the session.")
-  });
-  //ws.send('Welcome to WebSocket server');
-});
+    clients.delete(clientId);
+    players.delete(clientId);
+    leaveLobby(player.lobby, clientId)
 
-//log updates (players join/leave), is shown to client
-function updateLog(info){
-  wss.clients.forEach(function each(client) {
-    if (client.readyState === WebSocket.OPEN) { // Ensure the client is ready
-      const data = JSON.stringify({type:"logupdate", message: info})
-      client.send(data.toString());
-    }
+    console.log(`Client disconnected: ${clientId}`);
   });
+})
+
+function createLobby(clientId){
+  const ws = clients.get(clientId);
+  const code = generateJoinCode();
+
+  lobbies.set(code, {
+    code: code,
+    players: [],
+    host: clientId,
+    gameState: "joinScreen"
+  });
+
+  ws.send(JSON.stringify({
+    type: "lobbyCreated",
+    code: code
+  }));
+
+  console.log(lobbies.get(code).code);
+  joinLobby(lobbies.get(code).code, clientId);
 }
 
-/*
-  Fixed timestep server loop (30 Hz)
+function generateJoinCode(){
+  const randomCode = Math.floor(Math.random() * 100000000).toString().padStart(8, '0');
+  return randomCode;
+}
 
-  A fixed update rate ensures consistent simulation timing, reduces jitter, and is easier on the network.
-*/
+function joinLobby(code, clientId){
+  const ws = clients.get(clientId);
+  const player = players.get(clientId);
+  const lobby = lobbies.get(code);
 
-//send client updated player positions
-function sendPositions(){
-  const positions = [];
+  if (!lobby || lobby.gameState === "playing") return;
 
-  clients.forEach((data) => {
-    positions.push({
-      id: data.id,
-      x: data.x,
-      y: data.y,
-      color: data.color
-    })
+  lobby.players.push(clientId);
+  player.lobby = lobby.code;
+
+  ws.send(JSON.stringify({
+    type: "lobbyJoined",
+    player: clientId,
+    lobby: lobby
+  }))
+
+  console.log(lobby.players);
+  sendLobbyInfo(lobby);
+}
+
+function leaveLobby(code, clientId) {
+  const lobby = lobbies.get(code);
+  if (!lobby) return;
+
+  lobby.players = lobby.players.filter(id => id !== clientId);
+
+  if(clientId === lobby.host){
+    lobbies.delete(code);
+  }
+
+  console.log(lobby.players);
+  sendLobbyInfo(lobby)
+}
+
+function startGame(lobby, clientId){
+  console.log(clientId + " " + lobby.host + lobby.gameState);
+  if(lobby.gameState === "playing" || clientId !== lobby.host) return;
+  
+  lobby.gameState = "playing";
+
+  lobby.players.forEach((clientId) =>{
+    const ws = clients.get(clientId);
+    ws.send(JSON.stringify({
+      type: "startGame",
+      lobby: lobby
+    }))
   })
-
-  const message = JSON.stringify({
-    type: "updatePositions",
-    players: positions
-  });
-
-  wss.clients.forEach(function each(client) {
-    if (client.readyState === WebSocket.OPEN) { // Ensure the client is ready
-      client.send(message.toString());
-    }
-  });
-
 }
 
-//game loop
-setInterval(sendPositions, 1000 / 30);
+function sendLobbyInfo(lobby){
+  const message = JSON.stringify({
+    type: "lobbyInfo",
+    lobby: lobby
+  });
+
+  lobby.players.forEach((clientId) =>{
+    const ws = clients.get(clientId);
+    ws.send(message);
+  })
+}
+
+function sendPlayerPos(clientId) {
+  const ws = clients.get(clientId);
+  const data = players.get(clientId);
+
+  if (!ws || ws.readyState !== WebSocket.OPEN || !data) return;
+
+  const player = {
+    id: data.id,
+    x: data.x,
+    y: data.y,
+    ty: data.ty,
+    color: data.color
+  }
+
+  ws.send(JSON.stringify({
+    type: "clientPos",
+    player: player
+  }));
+}
+
+function sendPositions(lobby, playersList) {
+  const allPlayers = [...playersList.values()];
+
+  lobby.players.forEach((clientId) => {
+    const ws = clients.get(clientId);
+    const player = playersList.get(clientId);
+
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+
+    const opponents = allPlayers.filter(p => p.id !== clientId);
+
+    ws.send(JSON.stringify({
+      type: "updatePositions",
+      opponents,
+      player
+    }));
+  });
+}
+
+function gameLoop(){
+  lobbies.forEach((lobby) => {
+    if(lobby.gameState == "playing"){
+      const playersList = new Map();
+      lobby.players.forEach((playerId) =>{
+        const player = players.get(playerId);
+        //players in the lobby
+        playersList.set(playerId, player);
+
+        if(player.md){
+          player.ty += 25;
+        }
+      });
+
+      sendPositions(lobby, playersList);
+    }
+  });
+}
+
+setInterval(gameLoop, 1000 / 30);
