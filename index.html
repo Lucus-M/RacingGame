@@ -13,6 +13,7 @@
 </head>
 
 <body>
+    <!--Initial Join screen-->
     <div id="joinScreen" style="display: block">
         <h1>Join Lobby</h1>
         <p>Enter code to join</p>
@@ -23,13 +24,29 @@
         <input type="button" id="createLobbyButton" value="Create"></input>
     </div>
 
+    <!--Lobby Waiting screen-->
     <div id="lobbyScreen" style="display: none">
         <h1 id="lobbynamedisplay">Lobby</h1>
-        <h3 id="codeDisplay">0000000</h3>
+        <h1 id="codeDisplay">0000000</h1>
+
+        <div>
+            <p>Set Display Name:</p>
+            <input type="text" id="displayName" value="PlayerName">
+            <input type="button" id="setDisplayName" value="Set Name">   
+        </div>
+        <br>
         <h3>Players: <span id="numofplayers">0</span></h3>
+        <br>
+        
+        <p id="playersList">
+
+        </p>
+
+        </br>
         <input type="button" id="startGame" style="display: none" value="Start"></input>
     </div>
 
+    <!-- game screen -->
     <canvas id="gameScreen" width="1900" height="1075" style="display: none">
 
     </canvas>

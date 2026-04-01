@@ -6,6 +6,11 @@ body{
     background-color: black;
     color: white;
 }
+
+#codeDisplay{
+    font-size: 90px;
+}
+
 #gameScreen{
     border: 1px solid white;
     background-color: rgb(57, 222, 118);
