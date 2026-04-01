@@ -56,7 +56,7 @@ wss.on('connection', (ws) => {
     y: 0,
     ty: 0,
     id: clientId,
-    name: "Player-" + clientId,
+    name: "Player",
     lobby: "none",
     speed: 0
   })
@@ -77,7 +77,7 @@ wss.on('connection', (ws) => {
 
     //client mouse update event
     if(data.type === "mousemove"){
-      player.x = data.x;
+      player.x = data.x - 32;
       player.y = data.y;
     }
     //acceleration
@@ -96,8 +96,9 @@ wss.on('connection', (ws) => {
       console.log("game start!");
       startGame(lobbies.get(player.lobby), clientId);
     }
-    if (data.type = "changeName") {
+    if (data.type === "changeName") {
       player.name = data.name;
+      console.log(player.name);
       if (player.lobby !== "none") sendLobbyInfo(lobbies.get(player.lobby));
     }
   });
@@ -291,6 +292,7 @@ function sendPositions(lobby, playersList) {
 
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
+    //players list without the selected client
     const opponents = allPlayers.filter(p => p.id !== clientId);
 
     ws.send(JSON.stringify({

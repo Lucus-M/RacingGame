@@ -64,7 +64,6 @@ ws.onmessage = (msg) => {
         opponents = data.opponents;
         player = data.player;
         obstacles = data.obstacles;
-        console.log(obstacles);
     }
 
     if(data.type === "lobbyJoined"){
@@ -186,12 +185,19 @@ function gameLoop(){
         drawObject(p.x, opponentCarPosition(p.y), rockSprite)
     })
 
+    ctx.font = "20px Arial";
+    ctx.fillStyle = "#000000";
     opponents.forEach(p => {
-        drawObject(p.x, opponentCarPosition(p.ty), carSprite);
+        y = opponentCarPosition(p.ty);
+        drawObject(p.x, y, carSprite);
+        ctx.fillText(p.name, p.x, y-15);
     });
 
-    if(player) drawObject(player.x, 800, carSprite);
-
+    if(player) {
+        ctx.font = "30px Arial";
+        ctx.fillText("Name: " + player.name, 10, 30);
+        drawObject(player.x, 800, carSprite);
+    }
     //loop
     requestAnimationFrame(gameLoop);
 }
@@ -199,7 +205,7 @@ function gameLoop(){
 //draw sprite with assigned color
 function drawObject(x, y, sprite) {
     // Draw the original image first
-    ctx.drawImage(sprite, x - (32), y, 64, 64);
+    ctx.drawImage(sprite, x, y, 64, 64);
 }
 
 gameLoop();
