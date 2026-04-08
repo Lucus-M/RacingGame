@@ -3,6 +3,10 @@
     Programmed By Lucus Mulhorn, 2026
 -->
 
+<script>
+    console.log("test");
+</script>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -14,7 +18,7 @@
 
 <body>
     <!--Initial Join screen-->
-    <div id="joinScreen" style="display: block">
+    <div id="joinScreen" style="display: none">
         <h1>Join Lobby</h1>
         <p>Enter code to join</p>
         <input type="text" id="codeInput"></input><br>
@@ -47,7 +51,7 @@
     </div>
 
     <!-- game screen -->
-    <canvas id="gameScreen" width="1900" height="1075" style="display: none">
+    <canvas id="gameScreen" width="383" height="256" style="display: none">
 
     </canvas>
 
@@ -57,6 +61,8 @@
 
 </body>
 
+    <script src="public/sound.js"></script>
     <script src="public/script.js"></script>
     <script src="public/menus.js"></script>
+    <script src="public/drawing.js"></script>
 </html>

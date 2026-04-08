@@ -12,3 +12,6 @@ Progress:
 -successufly implemented mulitplayer connectivity
 
 Project hosted at https://www.lucusdm.com/lucus/RacingGame/
+
+
+4/2/2026 - Altered canvas sizing, testing level data

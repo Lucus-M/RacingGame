@@ -1,69 +1,46 @@
-
-
-//initialize canvas
-const cvs = document.getElementById("gameScreen");
-const ctx = cvs.getContext("2d");
-
-/*
-  Disabling image smoothing preserves crisp pixel rendering.
-
-  Reference:
-  MDN Canvas API - imageSmoothingEnabled
-  https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/imageSmoothingEnabled
-
-  This is especially important in 2D games to avoid blur artifacts.
-*/
-ctx.imageSmoothingEnabled = false; // For modern browsers
-ctx.webkitImageSmoothingEnabled = false; // For WebKit
-ctx.mozImageSmoothingEnabled = false; // For Firefox
-let carSprite = new Image();
-let rockSprite = new Image();
-
-/*
-  WebSocket client API:
-  https://developer.mozilla.org/en-US/docs/Web/API/WebSocket
-
-  WebSockets allow persistent bidirectional communication,
-  reducing latency compared to HTTP polling.
-
-  Protocol defined in:
-  RFC 6455 - The WebSocket Protocol
-  https://datatracker.ietf.org/doc/html/rfc6455
-*/
 //create socket
 const ws = new WebSocket('wss://www.lucusdm.com/ws/'); 
 
 let player;
 let opponents = [];
 let obstacles = [];
+let levelImages = [];
+let level = [];
+let racePos = [];
+let levelLength = 1;
 
-/*
-  Client receives authoritative state updates from server.
+//initialize canvas
+const cvs = document.getElementById("gameScreen");
+const ctx = cvs.getContext("2d");
 
-  This follows the "authoritative server model":
-  - Server computes game state
-  - Client renders it
+const maxHeight = window.innerHeight * 0.92;
 
-  Reference:
-  Glenn Fiedler - Multiplayer Networking Model
-  https://gafferongames.com/post/what_every_programmer_needs_to_know_about_game_networking/
-*/
+// find the largest integer scale that fits
+const scale = maxHeight / cvs.height;
+
+const BASE_OB = 215;
+
+cvs.style.height = (cvs.height * scale) + "px";
+cvs.style.width  = (cvs.width  * scale) + "px";
+
+document.getElementById("joinScreen").style.display = "block";
+
+//console.log(cvs.style.width);
+
 //on connection creation-
 ws.onopen = () => console.log("Connected to WebSocket");
 ws.onmessage = (msg) => {
     //recieve updates from server
-    /*
-      State synchronization:
-      Server sends full game state snapshot each tick.
-
-      This approach is known as "state replication"
-      in distributed systems.
-    */
     const data = JSON.parse(msg.data);
     if(data.type === "updatePositions"){
         opponents = data.opponents;
         player = data.player;
         obstacles = data.obstacles;
+        level = data.level;
+        racePos = data.racePos;
+
+        updateEngineSound(player.speed);
+        //console.log(racePos);
     }
 
     if(data.type === "lobbyJoined"){
@@ -81,131 +58,99 @@ ws.onmessage = (msg) => {
         document.getElementById("numofplayers").innerText = data.lobby.players.length;
     }
 
-    if(data.type === "startGame"){
-        document.getElementById("joinScreen").style.display = "none";
-        document.getElementById("lobbyScreen").style.display = "none";
-        document.getElementById("gameScreen").style.display = "block";
+    if (data.type === "startGame") {
+        (async () => {
+            levelImages = await loadLevelImages(data.tiles);
+
+            document.getElementById("joinScreen").style.display = "none";
+            document.getElementById("lobbyScreen").style.display = "none";
+            document.getElementById("gameScreen").style.display = "block";
+
+            levelLength = data.levelLength;
+
+            playSound(sounds.get("music2"), 1.5);
+        })();
     }
+
+    if (data.type === "newLap") playSound(sounds.get("newLap"), 1.5);
+    if (data.type === "collideObst") playSound(sounds.get("smash"));
 }
 //error message-
 ws.onerror = (err) => console.error("WebSocket error:", err);
 //websocket close-
 ws.onclose = () => console.log("WebSocket closed");
 
-/*
-  Image loading:
+let leftClick = false;
+let middleClick = false;
+let rightClick = false;
 
-  The Image() constructor loads external resources asynchronously.
-  Rendering should only occur after onload fires.
+let screechSoundPlaying = false;
 
-  Reference:
-  MDN - HTMLImageElement
-  https://developer.mozilla.org/en-US/docs/Web/API/HTMLImageElement
-*/
-//load sprite image
-carSprite.onload = function() {
-    //initialize
-    ctx.drawImage(carSprite, 16, 16);
+function mouse(event, boolean){
+    if (event.button === 0) leftClick = boolean;   // left click
+    if (event.button === 1) middleClick = boolean;
+    if (event.button === 2) rightClick = boolean;  // right click
+
+    ws.send(JSON.stringify({
+        type: "mousedown",
+        lc: leftClick,
+        mc: middleClick,
+        rc: rightClick
+    }));
 }
-carSprite.src = "public/car.png";
 
-rockSprite.onload = function() {
-    //initialize
-    ctx.drawImage(rockSprite, 16, 16);
-}
-rockSprite.src = "public/rock.png";
-
-let mousedown = false;
-
-/*
-  Input handling:
-
-  Mouse events are captured and sent to server.
-
-  This implements an "input-driven networking model"
-  where:
-  - Client sends input
-  - Server computes results
-
-  Reduces cheating and ensures consistency.
-*/
 //control event listeners
-cvs.addEventListener('mousedown', () => {
-    mousedown = true;
-    ws.send(JSON.stringify({type: "mousedown", md: mousedown}))
-})
-cvs.addEventListener('mouseup', () => {
-    mousedown = false;
-    ws.send(JSON.stringify({type: "mousedown", md: mousedown}))
-})
+document.addEventListener('keydown', (event) => {
+    if (event.code === 'Space' && !event.repeat) {
+        ws.send(JSON.stringify({ type: "rev" }));
+    }
+});
 
+cvs.addEventListener('mousedown', (event) => {
+    mouse(event, true);
+});
+
+cvs.addEventListener('mouseup', (event) => {
+    mouse(event, false);
+});
+
+let prevMousePos = {x: 0, y: 0};
+let mousePos = {x: 0, y: 0};
 cvs.addEventListener('mousemove', (event) => {
-    const posx = event.clientX;
-    const posy = event.clientY;
-    //send data to server
-    ws.send(JSON.stringify({type: "mousemove", x: posx, y: posy}))
+    if(mousePos){
+        prevMousePos = mousePos;
+    }
+    mousePos = getCvsMousePos(event);
 })
 
-/*
-  Coordinate transformation:
+function getCvsMousePos(e){
+    const cvspos = e.currentTarget.getBoundingClientRect();
 
-  Converts world coordinates (server) into screen coordinates (client).
+    const posx = Math.round((e.clientX - cvspos.left) / scale);
+    const posy = Math.round((e.clientY - cvspos.top) / scale);
 
-  This is a basic camera transform where:
-  - Player is fixed on screen
-  - World moves relative to player
+    return {x: posx, y: posy}
+}
 
-  Common technique in 2D games:
-  "camera-relative rendering"
-*/
+function sendMousePos(mousePos){
+    ws.send(JSON.stringify({type: "mousemove", x: mousePos.x, y: mousePos.y}))
+}
+
+let cameraY = 0;
 function opponentCarPosition(y){
     diff = y - player.ty;
-    return 800 - diff;
+    return Math.floor(player.offsetBottom - diff);
 }
 
-const leftRoad = 1900/2 - (550/2);
-const roadhWidth = 550;
-
-//draw each frame
-function gameLoop(){
-    ctx.clearRect(0, 0, cvs.width, cvs.height);
-
-    ctx.fillStyle = "#6a6c7a";
-    ctx.fillRect(1900/2 - (550/2), 0, 550, 1075);
-
-    /*
-      Render obstacles:
-
-      Rendering order matters:
-      - Background first
-      - Objects next
-      - Player last (for visibility)
-    */
-    obstacles.forEach(p => {
-        drawObject(p.x, opponentCarPosition(p.y), rockSprite)
-    })
-
-    ctx.font = "20px Arial";
-    ctx.fillStyle = "#000000";
-    opponents.forEach(p => {
-        y = opponentCarPosition(p.ty);
-        drawObject(p.x, y, carSprite);
-        ctx.fillText(p.name, p.x, y-15);
-    });
-
-    if(player) {
-        ctx.font = "30px Arial";
-        ctx.fillText("Name: " + player.name, 10, 30);
-        drawObject(player.x, 800, carSprite);
+function checkTrackPosition(p){
+    ty = p.ty;
+    if(player.chunk == (levelLength/256) - 1 && p.chunk == 0){
+        ty += levelLength;
     }
-    //loop
-    requestAnimationFrame(gameLoop);
+    y = opponentCarPosition(ty);
+
+    return y;
 }
 
-//draw sprite with assigned color
-function drawObject(x, y, sprite) {
-    // Draw the original image first
-    ctx.drawImage(sprite, x, y, 64, 64);
-}
 
-gameLoop();
+cvs.addEventListener('contextmenu', (e) => e.preventDefault());

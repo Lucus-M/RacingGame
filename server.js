@@ -1,35 +1,25 @@
-/*
-  WebSocket server implementation using the ws library:
-  https://github.com/websockets/ws
 
-  Underlying protocol defined in:
-  RFC 6455 – The WebSocket Protocol (Fette & Melnikov, 2011)
-  https://datatracker.ietf.org/doc/html/rfc6455
 
-  WebSockets provide persistent, full-duplex communication over TCP,
-  reducing overhead compared to HTTP polling for real-time applications.
-*/
+const { loadLevel } = require('./levels.js');
+
+const TILE_SIZE = 16;
+const CHUNK_SIZE = 256;
+
+const TOP_SPEED = 10;
+const TURBO_SPEED = 13; 
+const BASE_OB = 215; //offset bottom default
 
 const WebSocket = require('ws');
 const wss = new WebSocket.Server({ port: 8080, path: '/ws/' });
-
-/*
-  Data structures:
-
-  Map is used for O(1) average lookup time.
-  (Cormen et al., "Introduction to Algorithms", Hash Tables)
-
-  These Maps separate concerns:
-  - lobbies → session management
-  - clients → network connections
-  - players → game state
-*/
 
 const lobbies = new Map(); //lobbies to join with an 8 digit code
 const clients = new Map(); //client connection corresponding to each player (key: clientid)
 const players = new Map(); //player information (key: clientid)
 
+const level = loadLevel("beach");
+
 let nextId = 1;
+console.log(process.cwd());
 
 wss.on('connection', (ws) => {
   console.log('Client connected');
@@ -42,23 +32,33 @@ wss.on('connection', (ws) => {
   //new client, identified by client id, with connection identifier
   clients.set(clientId, ws)
   
-  /*
-    Authoritative server model:
-    Server stores true player state, not the client.
-
-    Reference:
-    Gaffer On Games – Multiplayer Networking Model
-    https://gafferongames.com/post/what_every_programmer_needs_to_know_about_game_networking/
-  */
   //player data, identified by id
   players.set(clientId, {
     x: 0,
     y: 0,
+    tx: 0,
     ty: 0,
+    lc: false,
+    mc: false,
+    rc: false,
+    rev: false,
     id: clientId,
     name: "Player",
     lobby: "none",
-    speed: 0
+    speed: 0,
+    chunk: 0,
+    racePos: 0,
+    color: 0,
+    lap: 1,
+    yRace: 0,
+    offsetBottom: BASE_OB,
+    overlapTile: "",
+    collideWithObst: false, 
+    collideWithOpponent: false, 
+    animationFrame: 0,
+    animationTimer: 0,
+    revPastFinish: true,
+    starting: true
   })
 
   //player data
@@ -77,12 +77,18 @@ wss.on('connection', (ws) => {
 
     //client mouse update event
     if(data.type === "mousemove"){
-      player.x = data.x - 32;
-      player.y = data.y;
+      player.x = Math.max(0, Math.min(240, data.x - 8));
+      player.y = data.y - 8;
     }
     //acceleration
     if(data.type === "mousedown"){
-      player.md = data.md; //mouse up/down
+      player.lc = data.lc; //mouse up/down
+      player.mc = data.mc;
+      player.rc = data.rc;
+    }
+
+    if(data.type === "rev"){
+      player.rev = !player.rev; //reverse
     }
 
     //lobby handling
@@ -112,15 +118,6 @@ wss.on('connection', (ws) => {
   });
 })
 
-/*
-  Lobby creation system:
-
-  Uses randomly generated join codes,
-  similar to private match systems in online games.
-
-  Random code generation ensures low collision probability
-  (Birthday paradox considerations for large player counts).
-*/
 //create a new lobby
 function createLobby(clientId){
   const ws = clients.get(clientId);
@@ -132,13 +129,17 @@ function createLobby(clientId){
     host: clientId,
     gameState: "joinScreen",
     obstacles: [],
-    nextY: 100 
+    nextY: 300,
+    level: "beach",
+    racePos: [],
+    colorOrder: [],
   });
 
   const lobby = lobbies.get(code);
 
   //init obstacles
-  for(let i = 0; i <= 200; i++){
+  
+  for(let i = 0; i <= level.layout.length; i++){
     newObstacle(lobby);
   }
 
@@ -153,17 +154,10 @@ function createLobby(clientId){
 
 //generate random 8 digit code
 function generateJoinCode(){
-  const randomCode = Math.floor(Math.random() * 100000000).toString().padStart(8, '0');
+  const randomCode = Math.floor(Math.random() * 100000).toString().padStart(4, '0');
   return randomCode;
 }
 
-/*
-  Lobby join logic ensures:
-  - Lobby exists
-  - Game not already started
-
-  This is basic state validation logic.
-*/
 //join a lobby
 function joinLobby(code, clientId){
   const ws = clients.get(clientId);
@@ -173,6 +167,8 @@ function joinLobby(code, clientId){
   if (!lobby || lobby.gameState === "playing") return;
 
   lobby.players.push(clientId);
+  lobby.colorOrder.push(clientId);
+
   player.lobby = lobby.code;
 
   ws.send(JSON.stringify({
@@ -191,6 +187,7 @@ function leaveLobby(code, clientId) {
   if (!lobby) return;
 
   lobby.players = lobby.players.filter(id => id !== clientId);
+  lobby.colorOrder = lobby.colorOrder.filter(id => id !== clientId);
 
   //if host leaves, lobby is deleted
   if(clientId === lobby.host){
@@ -203,61 +200,81 @@ function leaveLobby(code, clientId) {
 
 function newObstacle(lobby){
   lobby.obstacles.push({
-    x: Math.floor(Math.random() * (1225 - 675 + 1)) + 675,
-    y: lobby.nextY
+    x: Math.floor(Math.random() * ((256/2 - (127/2)) - 191 + 1)) + 191,
+    ty: lobby.nextY,
+    chunk: Math.floor(lobby.nextY/256)
   })
-  lobby.nextY += Math.floor(Math.random() * (500 - 200 + 1)) + 200;
+  lobby.nextY += Math.floor(Math.random() * (375 - 127 + 1)) + 127;
 }
 
-/*
-  Axis-Aligned Bounding Box (AABB) collision detection.
-
-  This is a standard technique in 2D games:
-  https://developer.mozilla.org/en-US/docs/Games/Techniques/2D_collision_detection
-
-  Efficient because it avoids expensive geometry calculations.
-*/
 function collideObst(player, lobby){
   //checks until it finds a collision
   return lobby.obstacles.some(obst =>
-    player.x < obst.x + 64 &&
-    player.x + 64 > obst.x &&
-    player.ty < obst.y + 64 &&
-    player.ty + 64 > obst.y
+    player.tx < obst.x + 16 &&
+    player.tx + 16 > obst.x &&
+    player.ty < obst.ty + 16 &&
+    player.ty + 16 > obst.ty
   );
 }
 
-/*
-  Broadcast lobby state to all players.
-  This is a server to client synchronization step.
-*/
+function collidePlayer(player, opponent){
+  return player.tx < opponent.tx + 16 &&
+    player.tx + 16 > opponent.tx &&
+    player.ty < opponent.ty + 16 &&
+    player.ty + 16 > opponent.ty
+}
+
 //start the game
 function startGame(lobby, clientId){
-  console.log(clientId + " " + lobby.host + lobby.gameState);
+  //console.log(clientId + " " + lobby.host + lobby.gameState);
   //
   if(lobby.gameState === "playing" || clientId !== lobby.host) return;
   
   //change game state to playing
   lobby.gameState = "playing";
 
-  let tyStart = 0;
+  let tyStart = level.layout.length * 255;
   //tell each client in lobby to start game
   lobby.players.forEach((clientId) =>{
-    players.get(clientId).ty = tyStart; 
-    tyStart -= 10;
+    lobby.racePos.push(clientId);
 
+    player = players.get(clientId);
+    
+    player.ty = tyStart; 
+    player.color = lobby.colorOrder.findIndex(id => id === clientId);
+
+    //console.log(player.color);
     const ws = clients.get(clientId);
+
+    tyStart -= 24;
     ws.send(JSON.stringify({
       type: "startGame",
-      lobby: lobby
+      lobby: lobby,
+      tiles: level.tiles,
+      levelLength: level.layout.length * 256,
     }))
   })
 }
 
-/*
-  Broadcast lobby state to all players.
-  This is a server → client synchronization step.
-*/
+function checkRacePos(lobby){
+  const playerPos = [];
+
+  lobby.players.forEach((clientId) => {
+    const ws = clients.get(clientId);
+    const player = players.get(clientId);
+
+    //const yRace = player.ty + ((player.lap-1) * (level.layout.length * 256));
+    //player.yRace = yRace;
+    playerPos.push({id: clientId, pos: player.ty, lap: player.lap, revPastFinish: player.revPastFinish});
+  });
+
+  playerPos.sort((a, b) => b.pos - a.pos);
+  playerPos.sort((a, b) => b.lap - a.lap);
+  playerPos.sort((a, b) => a.revPastFinish - b.revPastFinish);
+
+  lobby.racePos = playerPos;
+}
+
 //send all player info to each client in lobby
 function sendLobbyInfo(lobby){
   const message = JSON.stringify({
@@ -271,16 +288,85 @@ function sendLobbyInfo(lobby){
   })
 }
 
-/*
-  State synchronization:
+function newLap(player, addsub){
+    player.lap += addsub;
 
-  Each client receives:
-  - Their own player state
-  - Opponent states
-  - Obstacles
+    //console.log(player.id);
+    const ws = clients.get(player.id);
 
-  This reduces client-side filtering work.
-*/
+    ws.send(JSON.stringify({
+      type: "newLap",
+    }));
+}
+
+function getNextChunk(chunkPos){
+  const totalChunks = level.layout.length;
+
+  let nextChunkPos = chunkPos + 1;
+  if (nextChunkPos >= totalChunks) {
+    nextChunkPos = 0;
+  }
+
+  return nextChunkPos;
+}
+
+function getPrevChunk(chunkPos){
+  const totalChunks = level.layout.length;
+
+  let prevChunkPos = chunkPos - 1;
+  if (chunkPos == 0){
+      prevChunkPos = totalChunks - 1;
+  }
+
+  return prevChunkPos;
+}
+
+function sendLevelData(player) {
+  const totalChunks = level.layout.length;
+  const totalLength = totalChunks * 256;
+
+  if (player.prevTy === undefined) {
+    player.prevTy = player.ty;
+  }
+
+  // Reverse through finish (ty = 0 going negative)
+  if (player.speed < 0 && player.prevTy >= 0 && player.ty < 0) {
+    player.revPastFinish = true;
+    //player.lap = 0;
+  }
+
+  if (player.speed >= 0 && player.prevTy < totalLength && player.ty >= totalLength) {
+    if (!player.revPastFinish) {
+      newLap(player, 1);
+    }
+    player.revPastFinish = false; // reset either way
+  }
+  if (player.ty < 0) {
+    player.ty = totalLength + player.ty;
+  }
+
+  if (player.ty >= totalLength) {
+    player.ty = player.ty - totalLength;
+  }
+
+  let chunkPos = Math.floor(player.ty / 256);
+  chunkPos = ((chunkPos % totalChunks) + totalChunks) % totalChunks;
+
+  let nextChunkPos = getNextChunk(chunkPos);
+  let prevChunkPos = getPrevChunk(chunkPos);
+  //console.log(nextChunkPos + " " + chunkPos + " " + prevChunkPos);
+
+  player.chunk = chunkPos;
+
+  player.prevTy = player.ty;
+
+  return [
+    ...level.layout[nextChunkPos],
+    ...level.layout[chunkPos],
+    ...level.layout[prevChunkPos],
+  ];
+}
+
 //send all player positions to each client
 function sendPositions(lobby, playersList) {
   const allPlayers = [...playersList.values()];
@@ -295,72 +381,219 @@ function sendPositions(lobby, playersList) {
     //players list without the selected client
     const opponents = allPlayers.filter(p => p.id !== clientId);
 
+    sendLevelData(player);
     ws.send(JSON.stringify({
       type: "updatePositions",
       opponents,
       player,
-      obstacles: lobby.obstacles
+      obstacles: lobby.obstacles,
+      level: sendLevelData(player),
+      racePos: lobby.racePos
     }));
   });
 }
 
+function getCollidedTile(player){
+  // center of player
+  const playerXOffset = player.tx + 8;
+  const playerYOffset = player.ty + 41;
 
-/*
-  Game simulation step (fixed timestep).
+  // tile X
+  const tileX = Math.floor(playerXOffset / TILE_SIZE);
 
-  Based on:
-  "Fix Your Timestep!" – Glenn Fiedler
-  https://gafferongames.com/post/fix_your_timestep/
+  // convert to chunk-relative Y
+  const relativeY = playerYOffset - (player.chunk * CHUNK_SIZE);
 
-  Fixed updates ensure:
-  - Consistent physics
-  - Predictable gameplay
-*/
+  // tile Y (flipped)
+  let tileY = Math.floor((CHUNK_SIZE - relativeY) / TILE_SIZE);
+
+  // clamp properly
+  tileY = Math.max(0, Math.min(15, tileY));
+
+  return { x: tileX, y: tileY };
+}
+
+function handleAnimation(player){
+  if(player.animationTimer >= 100){
+    player.animationFrame ^= 1;
+    player.animationTimer = 0;
+  }
+  player.animationTimer += Math.abs(player.speed) * 10;
+}
+
+function getPlayersInLobby(lobby) {
+  return lobby.players
+    .map(id => players.get(id))
+    .filter(p => p !== undefined);
+}
+
+function groupPlayersByChunk(playersMap) {
+  const chunkMap = new Map();
+
+  playersMap.forEach((player) => {
+    if (!chunkMap.has(player.chunk)) {
+      chunkMap.set(player.chunk, []);
+    }
+
+    chunkMap.get(player.chunk).push(player);
+  });
+
+  return chunkMap;
+}
+
 function frame(lobby){
   const playersList = new Map();
+  const lobbyplayers = getPlayersInLobby(lobby);
+  const chunkMap = groupPlayersByChunk(lobbyplayers);
   lobby.players.forEach((playerId) =>{
     const player = players.get(playerId);
+
+    //get all players in player's chunk except player
+    const playersInChunk = (chunkMap.get(player.chunk) || []).filter(p => p.id !== playerId);
+    playersInChunk.sort((a, b) => a.ty - b.ty);
+    
     //player data for each player in lobby
     playersList.set(playerId, player);
 
-    //base target speed
-    let targetSpeed = 26;
-    
-    //if player is on grass
-    if(player.x <= 675 || player.x >= 675+550){
-      targetSpeed = 8;
+    let accRate = 0.5;
+
+    let targetSpeed = TOP_SPEED;
+    let targetOffsetBottom = BASE_OB;
+    let obAccRate = 1;
+
+    let xaccRate = (player.x-player.tx)/2;
+
+    if(player.starting){
+      if(player.speed == targetSpeed){
+        accRate = 0.5
+        player.starting = false;
+      }
+      else{
+        accRate = 0.125;
+      }
     }
 
-    //let go of mouse
-    if(!player.md){
+    if(player.tx != player.x){
+      player.tx += xaccRate;
+    }
+
+    //left click - normal acceleration
+    if(player.lc && !player.mc){
+      targetOffsetBottom = BASE_OB - 20;
+    }
+
+    //right click - turbo speed
+    if(player.rc && !player.mc){
+      targetSpeed = TURBO_SPEED;
+      targetOffsetBottom = BASE_OB - 30;
+    }
+   
+    if(player.rev){
+      targetSpeed = -(targetSpeed /= 2)
+      targetOffsetBottom = BASE_OB - 55;
+    }
+
+    //let go of mouse/break
+    if(!player.lc && !player.rc || player.mc) targetSpeed = 0;
+
+    if(player.targetSpeed = 0 && (player.speed > -accRate)){
+      player.speed = 0;
+      accRate = 0;
+    }
+
+    const collidedTile = getCollidedTile(player);
+    let tileValue = 0;    
+    if(collidedTile && collidedTile.x !== undefined && collidedTile.y !== undefined){
+      tileValue = level.layout[player.chunk][collidedTile.y][collidedTile.x];
+      player.overlapTile = level.tiles[tileValue].type;
+    }
+
+    //player offroad
+    if(tileValue >= 0 && level.tiles[tileValue].type == "offroad"){
+      targetSpeed = Math.round(targetSpeed / 3);
+      accRate = 1;
+    }
+
+    let mousedown = (player.rc || player.lc);
+
+    if(level.tiles[tileValue].type == "offroad" && Math.trunc(player.speed) == 0 && !mousedown){
+      player.speed = 0;
+      accRate = 0;
+    }
+
+    //console.log(Math.trunc(player.speed))
+    
+    if(player.mc && targetSpeed == 0 && player.speed != 0){ 
+      accRate = 1;
+
+      //prevent jitter
+      if((player.speed <= 0 && !player.rev) || (player.speed >= 0 && player.rev)){
+        player.speed = 0;
+        accRate = 0;
+      }
+    }
+    //object collision
+    if(collideObst(player, lobby) && !player.collideWithObst && player.speed != 0){
+      player.collideWithObst = true;
+      player.speed = Math.round(-((player.speed / 1.5)+1));
+      clients.get(player.id).send(JSON.stringify({
+        type: "collideObst",
+      }));
+    }
+    else if(player.collideWithObst && player.speed < 2 && player.speed > -2){
+      player.speed = 0;
       targetSpeed = 0;
     }
+    if(!collideObst(player, lobby)){
+      player.collideWithObst = false;
+    }
+
+    playersInChunk.forEach((opponent) => {
+      //console.log(opponent);
+      const collide = collidePlayer(player, opponent);
+      const toggleCol = (player.collideWithPlayer && opponent.collideWithPlayer)
+      if(collide && !toggleCol){
+        player.collideWithPlayer = true;
+        opponent.collideWithPlayer = true;
+
+        let prevSpeed = player.speed;
+        player.speed += (opponent.speed + 1);
+        opponent.speed = -(prevSpeed + 1);
+
+        player.speed = Math.max(-TURBO_SPEED, Math.min(TURBO_SPEED, player.speed));
+        opponent.speed = Math.max(-TURBO_SPEED, Math.min(TURBO_SPEED, opponent.speed));
+
+        [clients.get(player.id), clients.get(opponent.id)].forEach((ws) => {
+          if (ws) {
+            ws.send(JSON.stringify({
+              type: "collideObst",
+            }));
+          }
+        });
+        
+      }
+
+      if(!collide){
+        player.collideWithPlayer = false;
+        opponent.collideWithPlayer = false;
+      }
+    });
 
     //acceleration/deceleration (gradually change car's speed to target speed)
-    if(player.speed < targetSpeed){
-      player.speed += 0.5;
-    }
-    else if(player.speed > targetSpeed){
-      player.speed -= 2;
+    if(player.speed != targetSpeed && !(player.mc && accRate == 0)){
+      player.speed += (Math.sign(targetSpeed - (player.speed)) * accRate);
+      player.offsetBottom += Math.sign(targetOffsetBottom - player.offsetBottom) * obAccRate;
     }
 
-    //object collision
-    if(collideObst(player, lobby)){
-      player.speed = 0;
-    }
-
-    //move car
+    handleAnimation(player);
     player.ty += player.speed;
   });
-
+  
+  checkRacePos(lobby);
   //broadcast game state to all clients
   sendPositions(lobby, playersList);
 }
 
-/*
-  Main game loop:
-  Iterates through all active lobbies.
-*/
 function gameLoop(){
   lobbies.forEach((lobby) => {
     //only run if game is started
@@ -368,12 +601,6 @@ function gameLoop(){
   });
 }
 
-/*
-  30 Hz update rate:
-  Standard for real-time multiplayer games.
 
-  Tradeoff:
-  - Lower bandwidth than 60 Hz
-  - Still smooth with interpolation on client
-*/
+
 setInterval(gameLoop, 1000 / 30);
