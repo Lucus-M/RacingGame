@@ -165,6 +165,7 @@ function joinLobby(code, clientId){
   const lobby = lobbies.get(code);
 
   if (!lobby || lobby.gameState === "playing") return;
+  if (lobby.players.length >= 8) return;
 
   lobby.players.push(clientId);
   lobby.colorOrder.push(clientId);

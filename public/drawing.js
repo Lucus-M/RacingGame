@@ -143,15 +143,90 @@ function drawMapPoint(x, player){
     drawObject(x, y, mapPoint, player.color * 8, 0, 8, 8, 8, 8);
 }
 
+//write all race positions on right of screen
+function racePosDisplay(){
+    racePos.forEach((p, index) => {
+        let name = "PLAYER";
+        let color = 0;
+        let placeColor = 0;
+
+        if (p.id === player.id){ 
+            name = player.name;
+            color = player.color + 1;
+            placeColor = color;
+            
+            drawObject(S_WIDTH + 16 + (8*2), 16*10 + (8 * index), mapPoint, player.color * 8, 0, 8, 8, 8, 8)
+
+            //highlight player in list
+            //ctx.fillStyle = COLORS[player.color];
+            //ctx.fillRect(S_WIDTH + 16, 16*10 + (8 * index), 8 * 2, 8)
+        }
+        else { 
+            opponent = opponents.find(opp => opp.id === p.id) 
+            name = opponent.name;
+            color = opponent.color + 1;
+            placeColor = color;
+        }
+
+        placeText = index+1 + "- ";
+        playersNameList = name.padEnd(16, " ") + "\n";
+                
+        drawText(placeText, S_WIDTH + 16, 16*10 + (8 * index), placeColor);
+        drawText(playersNameList, S_WIDTH + 16 + (3*8), 16*10 + (8 * index), color);
+    });
+}
+
+//write all info on right of screen
+function drawHUD(){  
+    drawText("POS  PLAYER", S_WIDTH + 16, 16*9, 0, 1, true);
+    drawText("---------", S_WIDTH + 16, (16*9)+8, 0);
+    drawText("PLAYER-\n  " + player.name.padStart(8, " "), S_WIDTH + 16, 8);
+
+    let lapText = "LAP- " + player.lap
+    let lapColor = 0;
+    if(player.revPastFinish && player.rev && player.speed != 0){
+        lapText = "WRONG WAY!"
+        lapColor = 1;
+    }
+
+    drawText( lapText, S_WIDTH + 16, 8*4, lapColor);
+    drawText( "POSITION-\n  " + (Math.floor((player.ty/levelLength)*100) + "%").padStart(8, " "), S_WIDTH + 16, 8*7);
+
+    let speedColor = 0;
+    let speedText = "SPEED";
+
+    if(player.rc && !player.mc && !player.rev){
+        speedColor = 5;
+        speedText = "TURBO"
+    }
+    else if(player.speed >= 10 && !player.rc){
+        speedColor = 2;
+    }
+    else if((player.speed < 0 || player.rev)){
+        speedText = "REV. ";
+        speedColor = 3
+    }
+    else if(player.mc){
+        speedColor = 8;
+        speedText = "BREAK";
+    }
+
+    drawText( speedText + "-\n  " + (Math.round(Math.abs((player.speed))) * 20 + "Mph").padStart(8, " "), S_WIDTH + 16, 8*10, speedColor);
+
+    racePosDisplay();
+}
+
 //draw each frame
 function gameLoop(){
     ctx.clearRect(0, 0, cvs.width, cvs.height);
 
+    //if player exists
     if(player){
         //draw level tiles
         if(level.length > 0){
             level.forEach((row, y) => {
                 row.forEach((tile, x) => {
+                    //draw each level tile
                     drawObject(
                         x * 16,
                         Math.floor((((y * 16) + (256 * ((player.ty/256)-player.chunk))) - 256) - (BASE_OB - player.offsetBottom)),
@@ -161,103 +236,49 @@ function gameLoop(){
             });
         }
 
+        //draw rock obstacles
         obstacles.forEach(p => {
             let y = checkTrackPosition(p);
 
             drawObject(p.x, y, rockSprite)
         })
  
+        //draw position bar on right
         drawObject(S_WIDTH, 8, positionBar);
 
+        //draw each opponent
         opponents.forEach((p, index) => {
             let y = checkTrackPosition(p);
 
             drawObject(Math.round(p.x), y, carSprite, 16*p.animationFrame, p.color*16, 16, 16, 16, 16);
             //ctx.fillText(p.name, p.x, y-15);
 
+            //draw opponent's map point position
             drawMapPoint(S_WIDTH, p);
         });
 
+        //draw player's point on left position bar
         drawMapPoint(S_WIDTH, player)
         
-        racePos.forEach((p, index) => {
-            let name = "PLAYER";
-            let color = 0;
-            let placeColor = 0;
-
-            if (p.id === player.id){ 
-                name = player.name;
-                color = player.color + 1;
-                placeColor = color;
-                
-                drawObject(S_WIDTH + 16 + (8*2), 16*10 + (8 * index), mapPoint, player.color * 8, 0, 8, 8, 8, 8)
-
-                //highlight player in list
-                //ctx.fillStyle = COLORS[player.color];
-                //ctx.fillRect(S_WIDTH + 16, 16*10 + (8 * index), 8 * 2, 8)
-            }
-            else { 
-                opponent = opponents.find(opp => opp.id === p.id) 
-                name = opponent.name;
-                color = opponent.color + 1;
-                placeColor = color;
-            }
-
-            placeText = index+1 + "- ";
-            playersNameList = name.padEnd(16, " ") + "\n";
-                    
-            drawText(placeText, S_WIDTH + 16, 16*10 + (8 * index), placeColor);
-            drawText(playersNameList, S_WIDTH + 16 + (3*8), 16*10 + (8 * index), color);
-        });
-
+        //draw each race position display
+        drawHUD();
+        
         drawObject(Math.round(player.tx), player.offsetBottom, carSprite, 16*player.animationFrame, player.color*16, 16, 16, 16, 16);
-
-        drawText("POS  PLAYER", S_WIDTH + 16, 16*9, 0, 1, true);
-        drawText("---------", S_WIDTH + 16, (16*9)+8, 0);
-        drawText("PLAYER-\n  " + player.name.padStart(8, " "), S_WIDTH + 16, 8);
-
-        let lapText = "LAP- " + player.lap
-        let lapColor = 0;
-        if(player.revPastFinish && player.rev && player.speed != 0){
-            lapText = "WRONG WAY!"
-            lapColor = 1;
-        }
-
-        drawText( lapText, S_WIDTH + 16, 8*4, lapColor);
-        drawText( "POSITION-\n  " + (Math.floor((player.ty/levelLength)*100) + "%").padStart(8, " "), S_WIDTH + 16, 8*7);
-
-        let speedColor = 0;
-        let speedText = "SPEED";
-
-        if(player.rc && !player.mc && !player.rev){
-            speedColor = 5;
-            speedText = "TURBO"
-        }
-        else if(player.speed >= 10 && !player.rc){
-            speedColor = 2;
-        }
-        else if((player.speed < 0 || player.rev)){
-            speedText = "REV. ";
-            speedColor = 3
-        }
-        else if(player.mc){
-            speedColor = 8;
-            speedText = "BREAK";
-        }
-
-        drawText( speedText + "-\n  " + (Math.round(Math.abs((player.speed))) * 20 + "Mph").padStart(8, " "), S_WIDTH + 16, 8*10, speedColor);
     }
 
-    //loop
+    //send mouse position to server
     if(mousePos.x !== prevMousePos.x){
         //console.log(mousePos.x + " " + prevMousePos.x);
         sendMousePos(mousePos);
     }
     
+    //brake
     if(middleClick && player.speed != 0 && !screechSoundPlaying){
         screechSoundPlaying = true;
         playSound(sounds.get("screech"));
     }
+
+    //stop brake sound
     else if((!middleClick || player.speed === 0) && screechSoundPlaying){
         screechSoundPlaying = false;
         stopSound(sounds.get("screech"));
