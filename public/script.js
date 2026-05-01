@@ -99,12 +99,43 @@ function mouse(event, boolean){
     }));
 }
 
+let leftkey = false;
+let rightkey = false;
+
 //control event listeners
 document.addEventListener('keydown', (event) => {
     if (event.code === 'Space' && !event.repeat) {
         ws.send(JSON.stringify({ type: "rev" }));
     }
+
+    if (event.code === 'ArrowRight'){
+        rightkey = true;
+    }
+    if (event.code === 'ArrowLeft'){
+        leftkey = true;
+    } 
+    
+    ws.send(JSON.stringify({ type: "key",
+        rkey: rightkey,
+        lkey: leftkey
+    }))
 });
+
+document.addEventListener('keyup', (event) => {
+    if (event.code === 'ArrowRight'){
+        rightkey = false;
+    }
+    if (event.code === 'ArrowLeft'){
+        leftkey = false;
+    } 
+    
+    ws.send(JSON.stringify({ type: "key",
+        rkey: rightkey,
+        lkey: leftkey
+    }))
+})
+
+
 
 cvs.addEventListener('mousedown', (event) => {
     mouse(event, true);

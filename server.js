@@ -41,6 +41,13 @@ wss.on('connection', (ws) => {
     lc: false,
     mc: false,
     rc: false,
+
+    rkey: false,
+    lkey: false,
+    zkey: false,
+    xkey: false,
+    shift: false,
+    
     rev: false,
     id: clientId,
     name: "Player",
@@ -85,6 +92,14 @@ wss.on('connection', (ws) => {
       player.lc = data.lc; //mouse up/down
       player.mc = data.mc;
       player.rc = data.rc;
+    }
+
+    if(data.type === "key"){
+      player.rkey = data.lkey;
+      player.lkey = data.rkey;
+      player.zkey = data.zkey;
+      player.xkey = data.xkey;
+      player.shift = data.shift;
     }
 
     if(data.type === "rev"){
@@ -462,7 +477,7 @@ function frame(lobby){
     let targetOffsetBottom = BASE_OB;
     let obAccRate = 1;
 
-    let xaccRate = (player.x-player.tx)/2;
+    //let xaccRate = (player.x-player.tx)/2;
 
     if(player.starting){
       if(player.speed == targetSpeed){
@@ -474,9 +489,25 @@ function frame(lobby){
       }
     }
 
+    /*
     if(player.tx != player.x){
       player.tx += xaccRate;
     }
+    */
+
+    const speed = 2;
+
+    if (player.rkey && player.lkey) {
+      player.tx += 0;
+    }
+    else if (player.rkey) {
+      player.tx -= speed;
+    }
+    else if (player.lkey) {
+      player.tx += speed;
+    }
+
+    player.tx = Math.max(0, Math.min(240, player.tx));
 
     //left click - normal acceleration
     if(player.lc && !player.mc){

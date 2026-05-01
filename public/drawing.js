@@ -250,7 +250,7 @@ function gameLoop(){
         opponents.forEach((p, index) => {
             let y = checkTrackPosition(p);
 
-            drawObject(Math.round(p.x), y, carSprite, 16*p.animationFrame, p.color*16, 16, 16, 16, 16);
+            drawObject(Math.round(p.tx), y, carSprite, 16*p.animationFrame, p.color*16, 16, 16, 16, 16);
             //ctx.fillText(p.name, p.x, y-15);
 
             //draw opponent's map point position
