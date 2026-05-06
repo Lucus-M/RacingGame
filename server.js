@@ -5,8 +5,8 @@ const { loadLevel } = require('./levels.js');
 const TILE_SIZE = 16;
 const CHUNK_SIZE = 256;
 
-const TOP_SPEED = 10;
-const TURBO_SPEED = 13; 
+const TOP_SPEED = 11;
+const TURBO_SPEED = 15; 
 const BASE_OB = 215; //offset bottom default
 
 const WebSocket = require('ws');
@@ -61,6 +61,10 @@ wss.on('connection', (ws) => {
     finalTime: 0,
 
     gamestate: "playing",
+
+    heat: 0,
+    maxheat: 250,
+    overheat: false,
 
     racePos: 0,
 
@@ -218,9 +222,11 @@ function leaveLobby(code, clientId) {
   lobby.colorOrder = lobby.colorOrder.filter(id => id !== clientId);
 
   //if host leaves, lobby is deleted
+  /*
   if(clientId === lobby.host){
     lobbies.delete(code);
   }
+  */
 
   console.log(lobby.players);
   sendLobbyInfo(lobby)
@@ -275,9 +281,12 @@ function startGame(lobby, clientId){
     const ws = clients.get(clientId);
 
     tyStart -= 24;
+    
+
     ws.send(JSON.stringify({
       type: "startGame",
       lobby: lobby,
+      host: lobby.host,
       tiles: level.tiles,
       levelLength: level.layout.length * 256,
 
@@ -566,10 +575,19 @@ function frame(lobby){
     }
 
     //right click - turbo speed
-    if(player.xkey && !player.shift){
+    if(player.xkey && !player.shift && !player.overheat){
       targetSpeed = TURBO_SPEED;
       targetOffsetBottom = BASE_OB - 30;
+      player.heat += 1;
     }
+    else if(!player.overheat && player.heat >= 0){
+      player.heat -= 1;
+    }
+
+    if(player.heat >= player.maxheat){
+      player.overheat = true;
+    }
+
    
     if(player.rev){
       targetSpeed = -(targetSpeed /= 2)
@@ -667,6 +685,15 @@ function frame(lobby){
 
     if(player.gamestate == "finished"){
       targetSpeed = 0;
+    }
+    
+    if(player.overheat){
+      targetSpeed = 0;
+      player.heat -= 2;
+
+      if(player.heat <= 0){
+        player.overheat = false;
+      }
     }
 
     //acceleration/deceleration (gradually change car's speed to target speed)

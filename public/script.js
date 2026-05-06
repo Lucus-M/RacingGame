@@ -9,6 +9,8 @@ let level = [];
 let racePos = [];
 let finalPos = [];
 let levelLength = 1;
+let host = 0;
+let musicStarted = false;
 
 //initialize canvas
 const cvs = document.getElementById("gameScreen");
@@ -42,6 +44,12 @@ ws.onmessage = (msg) => {
         finalPos = data.finalPos;
 
         updateEngineSound(player.speed);
+
+        if(player.id == host && !musicStarted){
+            playSound(sounds.get("music"), 1.5);        
+            musicStarted = true;
+        }
+
         //console.log(racePos);
     }
 
@@ -61,7 +69,7 @@ ws.onmessage = (msg) => {
     }
 
     if(data.type === "playerfinished"){
-        stopSound(sounds.get("music2"));
+        stopSound(sounds.get("music"));
         playSound(sounds.get("victory"));
     }
 
@@ -75,7 +83,7 @@ ws.onmessage = (msg) => {
                 data.tileWidth,
                 data.tileHeight
             );
-            
+
             //levelImages = await loadLevelImages(data.tiles);
             document.getElementById("joinScreen").style.display = "none";
             document.getElementById("lobbyScreen").style.display = "none";
@@ -84,7 +92,7 @@ ws.onmessage = (msg) => {
             levelLength = data.levelLength;
 
             
-            playSound(sounds.get("music2"), 1.5);
+            host = data.host;
         })();
     }
 
@@ -122,10 +130,6 @@ let xkey = false;
 let shift = false;
 
 function key(event, boolean){
-    if (event.code === 'Space' && !event.repeat) {
-        ws.send(JSON.stringify({ type: "rev" }));
-    }
-
     if (event.code === 'ArrowRight'){
         rightkey = boolean;
     }
@@ -165,6 +169,9 @@ document.addEventListener('keydown', (event) => {
 });
 
 document.addEventListener('keyup', (event) => {
+    if (event.code === 'Space' && !event.repeat) {
+        ws.send(JSON.stringify({ type: "rev" }));
+    }
     key(event, false);
 })
 

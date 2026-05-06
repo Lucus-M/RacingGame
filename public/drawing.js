@@ -254,6 +254,19 @@ function raceEndDisplay(){
     });
 }
 
+function overheatDisplay(){
+    ctx.fillStyle = "black";
+    ctx.fillRect(16, 16, S_WIDTH - 32, 32);
+
+    ctx.strokeStyle = '#ffffff';
+
+    ctx.lineWidth = 2;
+
+    ctx.strokeRect(16, 16, S_WIDTH - 32, 32);
+    
+    drawText("OVERHEAT!", (S_WIDTH/2)-32, 24, 0);
+}
+
 //write all info on right of screen
 function drawHUD(){  
     drawText("POS  PLAYER", S_WIDTH + 16, 16*9, 0, 1, true);
@@ -292,6 +305,21 @@ function drawHUD(){
     drawText( speedText + "-\n  " + (Math.round(Math.abs((player.speed))) * 20 + "Mph").padStart(8, " "), S_WIDTH + 16, 8*10, speedColor);
 
     racePosDisplay();
+
+    drawHeatDisp();
+    console.log(player.heat);
+    console.log(player.overheat);
+}
+
+function drawHeatDisp(){
+    ctx.fillStyle = "red";
+
+    let barwidth = Math.max(0, Math.round(64 * (player.heat / player.maxheat)))
+
+    drawText("HEAT-", S_WIDTH + 16, 8 * 13, 0);
+    ctx.fillRect(S_WIDTH + 16, (16 * 7) + 1, barwidth, 6);
+    drawText("[", S_WIDTH + 8, 16 * 7, 0);
+    drawText("]", S_WIDTH + 16 + 64, 16 * 7, 0);
 }
 
 //draw each frame
@@ -364,6 +392,7 @@ function gameLoop(){
         }
         //raceEndDisplay();
         if(player.gamestate == "finished") raceEndDisplay();
+        if(player.overheat) overheatDisplay();
     }
 
 
