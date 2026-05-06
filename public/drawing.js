@@ -62,6 +62,7 @@ let tileWidth = 16;
 let tileHeight = 16;
 let tilesPerRow = 0;
 
+//load sprite sheet image
 function loadSpriteSheet(src, tw, th) {
     return new Promise((resolve, reject) => {
         spriteSheet.onload = () => {
@@ -77,17 +78,7 @@ function loadSpriteSheet(src, tw, th) {
 }
 
 const S_WIDTH = 256; //gameplay screen width
-const NL = '\n'; //new line character
-const COLORS = [
-    "#ff0000",
-    "#639BFF",
-    "#FBF236",
-    "#00FF00",
-    "#FF6700",
-    "#FF00af",
-    "#8c00b3",
-    "#847387"
-]; 
+const NL = '\n'; //new line character 
 
 function drawObject(x, y, sprite, sx, sy, sw, sh, w, h) {
     // cropped & scaled
@@ -111,6 +102,7 @@ function drawObject(x, y, sprite, sx, sy, sw, sh, w, h) {
     ctx.drawImage(sprite, x, y);
 }
 
+//draw a tile from the tile sheet image
 function drawTile(tileId, x, y) {
     if (!spriteSheet || !spriteSheet.complete) return;
 
@@ -209,6 +201,7 @@ function racePosDisplay(){
     });
 }
 
+//display when player completes race
 function raceEndDisplay(){
     let playerPlaceText = " PLACE!";
 
@@ -227,6 +220,7 @@ function raceEndDisplay(){
         let color = 0;
         let placeText = index+1 + "- "
 
+        //gold, silver, bronze
         if(index == 0){color = 3};
         if(index == 1){color = 8};
         if(index == 2){color = 5};
@@ -243,7 +237,6 @@ function raceEndDisplay(){
 
             drawText(text, (S_WIDTH/2)-32, 32 + (8 * index), color);
         }
-
 
         placeText += playersNameList;
         drawText(placeText, (S_WIDTH/2)-64, 64 + (8 * index), color);
@@ -307,15 +300,18 @@ function drawHUD(){
     racePosDisplay();
 
     drawHeatDisp();
-    console.log(player.heat);
-    console.log(player.overheat);
+    //console.log(player.heat);
+    //console.log(player.overheat);
 }
 
+//heat progress bar
 function drawHeatDisp(){
     ctx.fillStyle = "red";
 
+    //64 pixels wide, width is percentage of heat/max heat, clamp to minimum 0
     let barwidth = Math.max(0, Math.round(64 * (player.heat / player.maxheat)))
 
+    //labels
     drawText("HEAT-", S_WIDTH + 16, 8 * 13, 0);
     ctx.fillRect(S_WIDTH + 16, (16 * 7) + 1, barwidth, 6);
     drawText("[", S_WIDTH + 8, 16 * 7, 0);
@@ -333,6 +329,7 @@ function gameLoop(){
             level.forEach((row, y) => {
                 row.forEach((tile, x) => {
 
+                    //draw each tile from tile sheet
                     const drawY = Math.floor(
                         ((y * 16) + (256 * ((player.ty / 256) - player.chunk))) - 256
                         - (BASE_OB - player.offsetBottom)

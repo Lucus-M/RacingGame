@@ -21,6 +21,10 @@ const level = loadLevel("beach2");
 let nextId = 1;
 console.log(process.cwd());
 
+// Uses the https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API library to implement WebSockets in Node.js.
+// WebSockets (defined in https://datatracker.ietf.org/doc/html/rfc6455)
+// allow persistent, full-duplex communication, reducing latency compared to HTTP polling.
+
 wss.on('connection', (ws) => {
   console.log('Client connected');
   console.log("Number of clients:", wss.clients.size);
@@ -71,8 +75,9 @@ wss.on('connection', (ws) => {
     //current game state (whether the player is playing or has finished the race)
     gamestate: "playing",
 
+    //overheat mechanic- if player holds in turbo button for too long car overheats and stalls for a while
     heat: 0,
-    maxheat: 250,
+    maxheat: 200,
     overheat: false,
 
     racePos: 0,
@@ -171,7 +176,7 @@ function createLobby(clientId){
     racePos: [],
     finalPos: [],
     colorOrder: [],
-    totallaps: 3
+    totallaps: 2
   });
 
   const lobby = lobbies.get(code);
@@ -351,9 +356,11 @@ function newLap(player, addsub){
 
     let lobby = lobbies.get(player.lobby);
 
-    if(player.lap >= lobby.totallaps && player.gamestate != "finished"){
+    if(player.lap > lobby.totallaps && player.gamestate != "finished"){
       player.gamestate = "finished";
       console.log("finished")
+
+      player.lap -= 1;
 
       lobby.finalPos.push(player);
 
@@ -590,13 +597,13 @@ function frame(lobby){
     }
 
     //right click - turbo speed
-    if(player.xkey && !player.shift && !player.overheat){
+    if(player.xkey && !player.shift && !player.overheat && player.gamestate == "playing"){
       targetSpeed = TURBO_SPEED;
       targetOffsetBottom = BASE_OB - 30;
       player.heat += 1;
     }
     else if(!player.overheat && player.heat >= 0){
-      player.heat -= 1;
+      player.heat -= 0.5;
     }
 
     if(player.heat >= player.maxheat && !player.overheat){
