@@ -7,6 +7,7 @@ let obstacles = [];
 let levelImages = [];
 let level = [];
 let racePos = [];
+let finalPos = [];
 let levelLength = 1;
 
 //initialize canvas
@@ -38,6 +39,7 @@ ws.onmessage = (msg) => {
         obstacles = data.obstacles;
         level = data.level;
         racePos = data.racePos;
+        finalPos = data.finalPos;
 
         updateEngineSound(player.speed);
         //console.log(racePos);
@@ -56,6 +58,11 @@ ws.onmessage = (msg) => {
 
     if(data.type === "lobbyInfo"){
         document.getElementById("numofplayers").innerText = data.lobby.players.length;
+    }
+
+    if(data.type === "playerfinished"){
+        stopSound(sounds.get("music2"));
+        playSound(sounds.get("victory"));
     }
 
     if (data.type === "startGame") {
@@ -101,41 +108,56 @@ function mouse(event, boolean){
 
 let leftkey = false;
 let rightkey = false;
+let zkey = false;
+let xkey = false;
+let shift = false;
 
-//control event listeners
-document.addEventListener('keydown', (event) => {
+function key(event, boolean){
     if (event.code === 'Space' && !event.repeat) {
         ws.send(JSON.stringify({ type: "rev" }));
     }
 
     if (event.code === 'ArrowRight'){
-        rightkey = true;
+        rightkey = boolean;
     }
     if (event.code === 'ArrowLeft'){
-        leftkey = true;
+        leftkey = boolean;
     } 
+
+    if (event.code === 'KeyZ') {
+        zkey = boolean;
+    }
     
-    ws.send(JSON.stringify({ type: "key",
+    if (event.code === 'KeyX') { // FIXED
+        xkey = boolean;
+    }
+    
+    if (event.code === 'ShiftLeft') {
+        shift = boolean;
+    }
+    
+    ws.send(JSON.stringify({ 
+        type: "key",
         rkey: rightkey,
-        lkey: leftkey
-    }))
+        lkey: leftkey,
+        zkey: zkey,
+        xkey: xkey,
+        shift: shift
+    }));
+}
+
+//control event listeners
+document.addEventListener('keydown', (event) => {
+    if(event.code === 'KeyR' && player.gamestate == "finished"){
+        window.location.reload();
+    }
+
+    key(event, true);
 });
 
 document.addEventListener('keyup', (event) => {
-    if (event.code === 'ArrowRight'){
-        rightkey = false;
-    }
-    if (event.code === 'ArrowLeft'){
-        leftkey = false;
-    } 
-    
-    ws.send(JSON.stringify({ type: "key",
-        rkey: rightkey,
-        lkey: leftkey
-    }))
+    key(event, false);
 })
-
-
 
 cvs.addEventListener('mousedown', (event) => {
     mouse(event, true);

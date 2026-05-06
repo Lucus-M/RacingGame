@@ -168,11 +168,56 @@ function racePosDisplay(){
             placeColor = color;
         }
 
-        placeText = index+1 + "- ";
+        let placeText = index+1 + "- ";
         playersNameList = name.padEnd(16, " ") + "\n";
                 
         drawText(placeText, S_WIDTH + 16, 16*10 + (8 * index), placeColor);
         drawText(playersNameList, S_WIDTH + 16 + (3*8), 16*10 + (8 * index), color);
+    });
+}
+
+function raceEndDisplay(){
+    let playerPlaceText = " PLACE!";
+
+    ctx.fillStyle = "black";
+    ctx.fillRect(16, 16, S_WIDTH - 32, S_WIDTH - 32);
+
+    ctx.strokeStyle = '#ffffff';
+
+    ctx.lineWidth = 2;
+
+    ctx.strokeRect(16, 16, S_WIDTH - 32, S_WIDTH - 32);
+
+    //drawText(playerPlaceText, 16, 16, 0)
+
+    finalPos.forEach((p, index) => {
+        let color = 0;
+        let placeText = index+1 + "- "
+
+        if(index == 0){color = 3};
+        if(index == 1){color = 8};
+        if(index == 2){color = 5};
+        playersNameList = p.name.padEnd(16, " ") + "\n";
+
+        if(player.id == p.id){
+            let suffix = "th";
+            let text = "" + (index + 1);
+            if(index == 0){suffix = "st"};
+            if(index == 1){suffix = "nd"};
+            if(index == 2){suffix = "rd"};
+
+            text += suffix + " PLACE!";
+
+            drawText(text, (S_WIDTH/2)-32, 32 + (8 * index), color);
+        }
+
+
+        placeText += playersNameList;
+        drawText(placeText, (S_WIDTH/2)-64, 64 + (8 * index), color);
+
+        drawText("<HIT R TO RETURN TO TITLE>", 24, 128+64, 4);
+
+        console.log("finish");
     });
 }
 
@@ -195,18 +240,18 @@ function drawHUD(){
     let speedColor = 0;
     let speedText = "SPEED";
 
-    if(player.rc && !player.mc && !player.rev){
+    if(player.xkey && !player.shift && !player.rev){
         speedColor = 5;
         speedText = "TURBO"
     }
-    else if(player.speed >= 10 && !player.rc){
+    else if(player.speed >= 10 && !player.xkey){
         speedColor = 2;
     }
     else if((player.speed < 0 || player.rev)){
         speedText = "REV. ";
         speedColor = 3
     }
-    else if(player.mc){
+    else if(player.shift){
         speedColor = 8;
         speedText = "BREAK";
     }
@@ -248,13 +293,15 @@ function gameLoop(){
 
         //draw each opponent
         opponents.forEach((p, index) => {
-            let y = checkTrackPosition(p);
+            if(p.gamestate == "playing"){
+                let y = checkTrackPosition(p);
 
-            drawObject(Math.round(p.tx), y, carSprite, 16*p.animationFrame, p.color*16, 16, 16, 16, 16);
-            //ctx.fillText(p.name, p.x, y-15);
+                drawObject(Math.round(p.tx), y, carSprite, 16*p.animationFrame, p.color*16, 16, 16, 16, 16);
+                //ctx.fillText(p.name, p.x, y-15);
 
-            //draw opponent's map point position
-            drawMapPoint(S_WIDTH, p);
+                //draw opponent's map point position
+                drawMapPoint(S_WIDTH, p);
+            }
         });
 
         //draw player's point on left position bar
@@ -264,25 +311,28 @@ function gameLoop(){
         drawHUD();
         
         drawObject(Math.round(player.tx), player.offsetBottom, carSprite, 16*player.animationFrame, player.color*16, 16, 16, 16, 16);
+            //send mouse position to server
+        if(mousePos.x !== prevMousePos.x){
+            //console.log(mousePos.x + " " + prevMousePos.x);
+            sendMousePos(mousePos);
+        }
+        
+        //brake
+        if(player.shift && player.speed != 0 && !screechSoundPlaying){
+            screechSoundPlaying = true;
+            playSound(sounds.get("screech"));
+        }
+
+        //stop brake sound
+        else if((!player.shift || player.speed === 0) && screechSoundPlaying){
+            screechSoundPlaying = false;
+            stopSound(sounds.get("screech"));
+        }
+        //raceEndDisplay();
+        if(player.gamestate == "finished") raceEndDisplay();
     }
 
-    //send mouse position to server
-    if(mousePos.x !== prevMousePos.x){
-        //console.log(mousePos.x + " " + prevMousePos.x);
-        sendMousePos(mousePos);
-    }
-    
-    //brake
-    if(middleClick && player.speed != 0 && !screechSoundPlaying){
-        screechSoundPlaying = true;
-        playSound(sounds.get("screech"));
-    }
 
-    //stop brake sound
-    else if((!middleClick || player.speed === 0) && screechSoundPlaying){
-        screechSoundPlaying = false;
-        stopSound(sounds.get("screech"));
-    }
 
     requestAnimationFrame(gameLoop);
 }

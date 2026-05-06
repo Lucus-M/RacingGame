@@ -36,7 +36,7 @@ wss.on('connection', (ws) => {
   players.set(clientId, {
     x: 0,
     y: 0,
-    tx: 0,
+    tx: 256/2 - 8,
     ty: 0,
     lc: false,
     mc: false,
@@ -54,7 +54,16 @@ wss.on('connection', (ws) => {
     lobby: "none",
     speed: 0,
     chunk: 0,
+    prevChunk: 0,
+    nextChunk: 0,
+
+    time: 0,
+    finalTime: 0,
+
+    gamestate: "playing",
+
     racePos: 0,
+
     color: 0,
     lap: 1,
     yRace: 0,
@@ -65,7 +74,7 @@ wss.on('connection', (ws) => {
     animationFrame: 0,
     animationTimer: 0,
     revPastFinish: true,
-    starting: true
+    starting: true,
   })
 
   //player data
@@ -147,16 +156,19 @@ function createLobby(clientId){
     nextY: 300,
     level: "beach",
     racePos: [],
+    finalPos: [],
     colorOrder: [],
+    totallaps: 2
   });
 
   const lobby = lobbies.get(code);
 
   //init obstacles
-  
+  /*
   for(let i = 0; i <= level.layout.length; i++){
     newObstacle(lobby);
   }
+    */
 
   ws.send(JSON.stringify({
     type: "lobbyCreated",
@@ -281,7 +293,7 @@ function checkRacePos(lobby){
 
     //const yRace = player.ty + ((player.lap-1) * (level.layout.length * 256));
     //player.yRace = yRace;
-    playerPos.push({id: clientId, pos: player.ty, lap: player.lap, revPastFinish: player.revPastFinish});
+    playerPos.push({id: clientId, pos: player.ty, lap: player.lap, revPastFinish: player.revPastFinish, gameState: player.gameState});
   });
 
   playerPos.sort((a, b) => b.pos - a.pos);
@@ -310,9 +322,24 @@ function newLap(player, addsub){
     //console.log(player.id);
     const ws = clients.get(player.id);
 
-    ws.send(JSON.stringify({
-      type: "newLap",
-    }));
+
+    let lobby = lobbies.get(player.lobby);
+
+    if(player.lap >= lobby.totallaps && player.gamestate != "finished"){
+      player.gamestate = "finished";
+      console.log("finished")
+
+      lobby.finalPos.push(player);
+
+      ws.send(JSON.stringify({
+        type: "playerfinished",
+      }));
+    }
+    else{
+      ws.send(JSON.stringify({
+        type: "newLap",
+      }));
+    }
 }
 
 function getNextChunk(chunkPos){
@@ -370,9 +397,12 @@ function sendLevelData(player) {
 
   let nextChunkPos = getNextChunk(chunkPos);
   let prevChunkPos = getPrevChunk(chunkPos);
+
   //console.log(nextChunkPos + " " + chunkPos + " " + prevChunkPos);
 
   player.chunk = chunkPos;
+  player.nextChunk = nextChunkPos;
+  player.prevChunk = prevChunkPos;
 
   player.prevTy = player.ty;
 
@@ -404,7 +434,8 @@ function sendPositions(lobby, playersList) {
       player,
       obstacles: lobby.obstacles,
       level: sendLevelData(player),
-      racePos: lobby.racePos
+      racePos: lobby.racePos,
+      finalPos: lobby.finalPos
     }));
   });
 }
@@ -443,6 +474,25 @@ function getPlayersInLobby(lobby) {
     .filter(p => p !== undefined);
 }
 
+function getNearbyPlayers(player, chunkMap, playerId) {
+  const combined = [
+    ...(chunkMap.get(player.prevChunk) || []),
+    ...(chunkMap.get(player.chunk) || []),
+    ...(chunkMap.get(player.nextChunk) || [])
+  ];
+
+  // Remove self + remove duplicates
+  const uniquePlayers = new Map();
+
+  combined.forEach(p => {
+    if (p.id !== playerId) {
+      uniquePlayers.set(p.id, p);
+    }
+  });
+
+  return Array.from(uniquePlayers.values());
+}
+
 function groupPlayersByChunk(playersMap) {
   const chunkMap = new Map();
 
@@ -465,7 +515,7 @@ function frame(lobby){
     const player = players.get(playerId);
 
     //get all players in player's chunk except player
-    const playersInChunk = (chunkMap.get(player.chunk) || []).filter(p => p.id !== playerId);
+    const playersInChunk = getNearbyPlayers(player, chunkMap, playerId);
     playersInChunk.sort((a, b) => a.ty - b.ty);
     
     //player data for each player in lobby
@@ -489,33 +539,30 @@ function frame(lobby){
       }
     }
 
-    /*
-    if(player.tx != player.x){
-      player.tx += xaccRate;
-    }
-    */
-
     const speed = 2;
 
-    if (player.rkey && player.lkey) {
-      player.tx += 0;
+    if(player.gamestate == "playing"){
+      if ((player.rkey) && (player.lkey)) {
+        player.tx += 0;
+      }
+      else if (player.rkey) {
+        player.tx -= speed;
+      }
+      else if (player.lkey) {
+        player.tx += speed;
+      }
     }
-    else if (player.rkey) {
-      player.tx -= speed;
-    }
-    else if (player.lkey) {
-      player.tx += speed;
-    }
+
 
     player.tx = Math.max(0, Math.min(240, player.tx));
 
     //left click - normal acceleration
-    if(player.lc && !player.mc){
+    if((player.zkey ) && !player.shift){
       targetOffsetBottom = BASE_OB - 20;
     }
 
     //right click - turbo speed
-    if(player.rc && !player.mc){
+    if(player.xkey && !player.shift){
       targetSpeed = TURBO_SPEED;
       targetOffsetBottom = BASE_OB - 30;
     }
@@ -526,7 +573,7 @@ function frame(lobby){
     }
 
     //let go of mouse/break
-    if(!player.lc && !player.rc || player.mc) targetSpeed = 0;
+    if(!player.zkey && !player.xkey || player.shift) targetSpeed = 0;
 
     if(player.targetSpeed = 0 && (player.speed > -accRate)){
       player.speed = 0;
@@ -546,16 +593,16 @@ function frame(lobby){
       accRate = 1;
     }
 
-    let mousedown = (player.rc || player.lc);
+    let keydown = (player.xkey || player.zkey);
 
-    if(level.tiles[tileValue].type == "offroad" && Math.trunc(player.speed) == 0 && !mousedown){
+    if(level.tiles[tileValue].type == "offroad" && Math.trunc(player.speed) == 0 && !keydown){
       player.speed = 0;
       accRate = 0;
     }
 
     //console.log(Math.trunc(player.speed))
     
-    if(player.mc && targetSpeed == 0 && player.speed != 0){ 
+    if(player.shift && targetSpeed == 0 && player.speed != 0){ 
       accRate = 1;
 
       //prevent jitter
@@ -582,43 +629,51 @@ function frame(lobby){
 
     playersInChunk.forEach((opponent) => {
       //console.log(opponent);
-      const collide = collidePlayer(player, opponent);
-      const toggleCol = (player.collideWithPlayer && opponent.collideWithPlayer)
-      if(collide && !toggleCol){
-        player.collideWithPlayer = true;
-        opponent.collideWithPlayer = true;
+      if(opponent.gamestate == "playing" && player.gamestate == "playing"){
+        const collide = collidePlayer(player, opponent);
+        const toggleCol = (player.collideWithPlayer && opponent.collideWithPlayer)
+        if(collide && !toggleCol){
+          player.collideWithPlayer = true;
+          opponent.collideWithPlayer = true;
 
-        let prevSpeed = player.speed;
-        player.speed += (opponent.speed + 1);
-        opponent.speed = -(prevSpeed + 1);
+          let prevSpeed = player.speed;
+          player.speed += (opponent.speed + 1);
+          opponent.speed = -(prevSpeed + 1);
 
-        player.speed = Math.max(-TURBO_SPEED, Math.min(TURBO_SPEED, player.speed));
-        opponent.speed = Math.max(-TURBO_SPEED, Math.min(TURBO_SPEED, opponent.speed));
+          player.speed = Math.max(-TURBO_SPEED, Math.min(TURBO_SPEED, player.speed));
+          opponent.speed = Math.max(-TURBO_SPEED, Math.min(TURBO_SPEED, opponent.speed));
 
-        [clients.get(player.id), clients.get(opponent.id)].forEach((ws) => {
-          if (ws) {
-            ws.send(JSON.stringify({
-              type: "collideObst",
-            }));
-          }
-        });
-        
-      }
+          [clients.get(player.id), clients.get(opponent.id)].forEach((ws) => {
+            if (ws) {
+              ws.send(JSON.stringify({
+                type: "collideObst",
+              }));
+            }
+          });
+          
+        }
 
-      if(!collide){
-        player.collideWithPlayer = false;
-        opponent.collideWithPlayer = false;
+        if(!collide){
+          player.collideWithPlayer = false;
+          opponent.collideWithPlayer = false;
+        }
+
       }
     });
 
+    if(player.gamestate == "finished"){
+      targetSpeed = 0;
+    }
+
     //acceleration/deceleration (gradually change car's speed to target speed)
-    if(player.speed != targetSpeed && !(player.mc && accRate == 0)){
+    if(player.speed != targetSpeed && !(player.shift && accRate == 0)){
       player.speed += (Math.sign(targetSpeed - (player.speed)) * accRate);
       player.offsetBottom += Math.sign(targetOffsetBottom - player.offsetBottom) * obAccRate;
     }
 
     handleAnimation(player);
     player.ty += player.speed;
+
   });
   
   checkRacePos(lobby);

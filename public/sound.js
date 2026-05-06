@@ -57,6 +57,14 @@ sounds.set("smash", {
     gainNode: null
 })
 
+sounds.set("victory", {
+    src: "./public/victory.mp3",
+    loop: false,
+    buffer: null,
+    source: null,
+    gainNode: null
+})
+
 async function loadSound(sound) {
     const res = await fetch(sound.src);
     const arrayBuffer = await res.arrayBuffer();
