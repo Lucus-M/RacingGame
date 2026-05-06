@@ -15,6 +15,10 @@ Progress:
 -basic physics
 -sound
 -HUD elements
+-Win/ranking system
+-Support for level editor level format
+-Overheat mechanic
+-Title logo
 
 Project hosted at https://www.lucusdm.com/lucus/RacingGame/
 
@@ -22,3 +26,7 @@ Project hosted at https://www.lucusdm.com/lucus/RacingGame/
 4/2/2026 - Altered canvas sizing, testing level data
 
 4/10/2026 - Added custom tracks, HUD elements, sound, physics
+
+4/26/2026 - New level data format
+
+5/5/2026 - Added overheat mechanic and rank screen when race is finished
