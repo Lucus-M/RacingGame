@@ -34,20 +34,27 @@ wss.on('connection', (ws) => {
   
   //player data, identified by id
   players.set(clientId, {
+    //mouse coordinates
     x: 0,
     y: 0,
+
+    //in game coordinates
     tx: 256/2 - 8,
     ty: 0,
+
+    //mouse (unused)
     lc: false,
     mc: false,
     rc: false,
 
+    //keyboard keys
     rkey: false,
     lkey: false,
     zkey: false,
     xkey: false,
     shift: false,
     
+    //reverse
     rev: false,
     id: clientId,
     name: "Player",
@@ -57,9 +64,11 @@ wss.on('connection', (ws) => {
     prevChunk: 0,
     nextChunk: 0,
 
+    //unused
     time: 0,
     finalTime: 0,
 
+    //current game state (whether the player is playing or has finished the race)
     gamestate: "playing",
 
     heat: 0,
@@ -232,6 +241,8 @@ function leaveLobby(code, clientId) {
   sendLobbyInfo(lobby)
 }
 
+
+//create a new robstacle
 function newObstacle(lobby){
   lobby.obstacles.push({
     x: Math.floor(Math.random() * ((256/2 - (127/2)) - 191 + 1)) + 191,
@@ -241,6 +252,8 @@ function newObstacle(lobby){
   lobby.nextY += Math.floor(Math.random() * (375 - 127 + 1)) + 127;
 }
 
+// Axis-Aligned Bounding Box (AABB) collision detection
+// Widely used due to efficiency (constant-time overlap checks)
 function collideObst(player, lobby){
   //checks until it finds a collision
   return lobby.obstacles.some(obst =>
@@ -506,6 +519,8 @@ function getNearbyPlayers(player, chunkMap, playerId) {
   return Array.from(uniquePlayers.values());
 }
 
+// Chunk-based spatial partitioning reduces collision complexity
+// Instead of O(n²), nearby checks approximate O(n)
 function groupPlayersByChunk(playersMap) {
   const chunkMap = new Map();
 
@@ -584,10 +599,15 @@ function frame(lobby){
       player.heat -= 1;
     }
 
-    if(player.heat >= player.maxheat){
+    if(player.heat >= player.maxheat && !player.overheat){
       player.overheat = true;
-    }
 
+      const ws = clients.get(player.id);
+
+      ws.send(JSON.stringify({
+        type: "overheatSound",
+      }));
+    }
    
     if(player.rev){
       targetSpeed = -(targetSpeed /= 2)
@@ -720,5 +740,7 @@ function gameLoop(){
 }
 
 
-
+// Fixed timestep game loop (~30 FPS)
+// Recommended for consistent physics simulation (see https://gameprogrammingpatterns.com/game-loop.html)
+// and https://gafferongames.com/post/fix_your_timestep/
 setInterval(gameLoop, 1000 / 30);

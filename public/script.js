@@ -96,7 +96,7 @@ ws.onmessage = (msg) => {
         })();
     }
 
-    if (data.type === "newLap") playSound(sounds.get("newLap"), 1.5);
+    if (data.type === "newLap" || data.type === "overheatSound") playSound(sounds.get("newLap"), 1.5);
     if (data.type === "collideObst") playSound(sounds.get("smash"));
 }
 //error message-
