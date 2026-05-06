@@ -67,14 +67,23 @@ ws.onmessage = (msg) => {
 
     if (data.type === "startGame") {
         (async () => {
-            levelImages = await loadLevelImages(data.tiles);
+            levelTiles = data.tiles;
+            levelLength = data.levelLength;
 
+            await loadSpriteSheet(
+                data.spriteSheet,
+                data.tileWidth,
+                data.tileHeight
+            );
+            
+            //levelImages = await loadLevelImages(data.tiles);
             document.getElementById("joinScreen").style.display = "none";
             document.getElementById("lobbyScreen").style.display = "none";
             document.getElementById("gameScreen").style.display = "block";
 
             levelLength = data.levelLength;
 
+            
             playSound(sounds.get("music2"), 1.5);
         })();
     }

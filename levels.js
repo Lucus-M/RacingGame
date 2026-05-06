@@ -15,6 +15,10 @@ function loadLevel(levelId){
     return {
         tiles,
         layout,
+
+        tileWidth: 16,
+        tileHeight: 16,
+        spriteSheet: "levels/testsheet.png"
     }
 }
 

@@ -16,7 +16,7 @@ const lobbies = new Map(); //lobbies to join with an 8 digit code
 const clients = new Map(); //client connection corresponding to each player (key: clientid)
 const players = new Map(); //player information (key: clientid)
 
-const level = loadLevel("beach");
+const level = loadLevel("beach2");
 
 let nextId = 1;
 console.log(process.cwd());
@@ -158,17 +158,17 @@ function createLobby(clientId){
     racePos: [],
     finalPos: [],
     colorOrder: [],
-    totallaps: 2
+    totallaps: 3
   });
 
   const lobby = lobbies.get(code);
 
   //init obstacles
-  /*
+  
   for(let i = 0; i <= level.layout.length; i++){
     newObstacle(lobby);
   }
-    */
+  
 
   ws.send(JSON.stringify({
     type: "lobbyCreated",
@@ -280,7 +280,11 @@ function startGame(lobby, clientId){
       lobby: lobby,
       tiles: level.tiles,
       levelLength: level.layout.length * 256,
-    }))
+
+      spriteSheet: level.spriteSheet || "tiles.png",
+      tileWidth: level.tileWidth || 16,
+      tileHeight: level.tileHeight || 16
+    }));
   })
 }
 

@@ -40,7 +40,7 @@ positionBar.onload = function() {
     ctx.drawImage(positionBar, 16, 16);
 }
 positionBar.src = "public/positionBar.png";
-
+/*
 async function loadLevelImages(tiles) { 
     const promises = tiles.map((tile) => {
         return new Promise((resolve, reject) => {
@@ -54,6 +54,26 @@ async function loadLevelImages(tiles) {
     });
 
     return await Promise.all(promises);
+}
+*/
+
+let spriteSheet = new Image();
+let tileWidth = 16;
+let tileHeight = 16;
+let tilesPerRow = 0;
+
+function loadSpriteSheet(src, tw, th) {
+    return new Promise((resolve, reject) => {
+        spriteSheet.onload = () => {
+            tileWidth = tw;
+            tileHeight = th;
+            tilesPerRow = Math.floor(spriteSheet.width / tileWidth);
+            resolve();
+        };
+
+        spriteSheet.onerror = reject;
+        spriteSheet.src = src;
+    });
 }
 
 const S_WIDTH = 256; //gameplay screen width
@@ -89,6 +109,19 @@ function drawObject(x, y, sprite, sx, sy, sw, sh, w, h) {
     // default draw
     //console.log(sprite);
     ctx.drawImage(sprite, x, y);
+}
+
+function drawTile(tileId, x, y) {
+    if (!spriteSheet || !spriteSheet.complete) return;
+
+    const sx = (tileId % tilesPerRow) * tileWidth;
+    const sy = Math.floor(tileId / tilesPerRow) * tileHeight;
+
+    ctx.drawImage(
+        spriteSheet,
+        sx, sy, tileWidth, tileHeight,
+        x, y, tileWidth, tileHeight
+    );
 }
 
 //                string      int    int    bool  bool
@@ -271,12 +304,13 @@ function gameLoop(){
         if(level.length > 0){
             level.forEach((row, y) => {
                 row.forEach((tile, x) => {
-                    //draw each level tile
-                    drawObject(
-                        x * 16,
-                        Math.floor((((y * 16) + (256 * ((player.ty/256)-player.chunk))) - 256) - (BASE_OB - player.offsetBottom)),
-                        levelImages[tile]
+
+                    const drawY = Math.floor(
+                        ((y * 16) + (256 * ((player.ty / 256) - player.chunk))) - 256
+                        - (BASE_OB - player.offsetBottom)
                     );
+
+                    drawTile(tile, x * 16, drawY);
                 });
             });
         }
